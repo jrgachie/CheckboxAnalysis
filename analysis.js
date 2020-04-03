@@ -2,25 +2,38 @@ var esprima = require("esprima");
 var options = {tokens:true, tolerant: true, loc: true, range: true };
 var fs = require("fs");
 
-function main()
-{
-	var args = process.argv.slice(2);
+function main() {
+	var filePaths = ["/home/soup/checkbox.io/server-side/site/", "/home/soup/checkbox.io/server-side/site/test/",
+		"/home/soup/checkbox.io/server-side/site/test/complexity/", "/home/soup/checkbox.io/server-side/site/routes/"];
 
-	if( args.length == 0 )
-	{
-		args = ["analysis.js"];
-	}
-	var filePath = args[0];
-	
-	complexity(filePath);
+	var files = [];
 
-	// Report
-	for( var node in builders )
-	{
-		var builder = builders[node];
-		builder.report();
-	}
+	filePaths.forEach(path => {
+		var tempFiles = fs.readdirSync(path).filter(x => x.includes('.js') && !x.includes('.json'));
 
+		tempFiles.forEach(file => {
+			files.push(path + file);
+		});
+	});
+
+	var fail = false;
+
+	files.forEach(file => {
+		complexity(file);
+
+		// Report
+		for (var node in builders) {
+			var builder = builders[node];
+			builder.report();
+
+			if (builder.MethodLength > 100 || builder.MaxMessageChains > 10 || builder.MaxNestingDepth > 5) {
+				fail = true;
+			}
+		}
+	});
+
+	if (fail)
+		process.exitCode = 1;
 }
 
 
@@ -30,31 +43,23 @@ var builders = {};
 // Represent a reusable "class" following the Builder pattern.
 function FunctionBuilder()
 {
-	this.StartLine = 0;
 	this.FunctionName = "";
-	// The number of parameters for functions
-	this.ParameterCount  = 0,
-	// Number of if statements/loops + 1
-	this.SimpleCyclomaticComplexity = 0;
-	// The max depth of scopes (nested ifs, loops, etc)
+	this.MethodLength = 0;
+	this.MaxMessageChains = 0;
 	this.MaxNestingDepth    = 0;
-	// The max number of conditions if one decision statement.
-	this.MaxConditions      = 0;
 
 	this.report = function()
 	{
 		console.log(
 		   (
-		   	"{0}(): {1}\n" +
+		   	"{0}()\n" +
 		   	"============\n" +
-			   "SimpleCyclomaticComplexity: {2}\t" +
-				"MaxNestingDepth: {3}\t" +
-				"MaxConditions: {4}\t" +
-				"Parameters: {5}\n\n"
+			    "MethodLength: {1}\t" +
+				"MaxMessageChains: {2}\t" +
+				"MaxNestingDepth: {3}\n\n"
 			)
-			.format(this.FunctionName, this.StartLine,
-				     this.SimpleCyclomaticComplexity, this.MaxNestingDepth,
-			        this.MaxConditions, this.ParameterCount)
+			.format(this.FunctionName, this.MethodLength,
+				this.MaxMessageChains, this.MaxNestingDepth,)
 		);
 	}
 };
@@ -63,19 +68,13 @@ function FunctionBuilder()
 function FileBuilder()
 {
 	this.FileName = "";
-	// Number of strings in a file.
-	this.Strings = 0;
-	// Number of imports in a file.
-	this.ImportCount = 0;
 
 	this.report = function()
 	{
 		console.log (
 			( "{0}\n" +
-			  "~~~~~~~~~~~~\n"+
-			  "ImportCount {1}\t" +
-			  "Strings {2}\n"
-			).format( this.FileName, this.ImportCount, this.Strings ));
+			  "~~~~~~~~~~~~\n"
+			).format( this.FileName));
 	}
 }
 
@@ -120,13 +119,96 @@ function complexity(filePath)
 			var builder = new FunctionBuilder();
 
 			builder.FunctionName = functionName(node);
-			builder.StartLine    = node.loc.start.line;
+			builder.MethodLength = node.loc.end.line - node.loc.start.line;
+			builder.MaxMessageChain = 0;
+			builder.MaxNestingDepth = 0;
+
+			traverseWithParents(node, function (child) {
+
+				if(child.type === "MemberExpression" && child.property.type === 'Identifier') {
+					var maxChains = 0;
+					traverseWithParents(child, function (grandchild) {
+						if(grandchild.type === "MemberExpression" && child.property.type === 'Identifier') {
+							maxChains += 1;
+						}
+					});
+					if(maxChains > builder.MaxMessageChains) {
+						builder.MaxMessageChains = maxChains;
+					}
+				}
+
+				if (child.type === 'IfStatement'){
+					console.log(builder.FunctionName+' '+child.type);
+					res = nestDepth(child);
+					console.log('\n\n');
+					if (res > builder.MaxNestingDepth){
+						builder.MaxNestingDepth = res;
+					}
+				}
+
+			});
 
 			builders[builder.FunctionName] = builder;
 		}
 
 	});
 
+}
+
+// Helper function for counting nesting
+function nestDepth(child)
+{
+	//console.log(child.type);
+	if ( !child || child.length === 0 ) {
+		return 0;
+	}
+
+	if(child.type === 'IfStatement') {
+		max = 0;
+		//console.log(child.test.name);
+		// console.log(child.consequent.body);
+		if (child.consequent) {
+			if (child.consequent.type === "BlockStatement") {
+				child.consequent.body.forEach(obj => {
+					res = nestDepth(obj);
+					if (res > max) max = res;
+				});
+
+				// console.log(child.consequent.body)
+				// for (obj in child.consequent) {
+				// 	res = nestDepth(child.consequent.body[obj]);
+				// 	// console.log("IF"+child.test.operator+res);
+				// 	if(res > max) max = res;
+				// }
+			} else {
+				//for (obj in child.consequent) {
+				//console.log(obj);
+				res = nestDepth(child.consequent);
+				if (res > max) max = res;
+				//}
+			}
+		}
+
+
+		if (child.alternate) {
+			if (child.alternate.type === "BlockStatement") {
+				for (obj in child.alternate.body) {
+					res = nestDepth(child.alternate.body[obj]);
+					// console.log("IF"+child.test.operator+res);
+					if (res > max) max = res;
+				}
+			} else {
+				//for (obj in child.alternate) {
+				res = nestDepth(child.alternate);
+				if (res > max) max = res;
+				//}
+			}
+		}
+		return max+1;
+	}
+	else {
+		return 0;
+	}
 }
 
 // Helper function for counting children of node.
