@@ -26,7 +26,7 @@ function main() {
 			var builder = builders[node];
 			builder.report();
 
-			if (builder.MethodLength > 100 || builder.MaxMessageChains > 10 || builder.MaxNestingDepth > 5) {
+			if (builder.MethodLength > 1000 || builder.MaxMessageChains > 100 || builder.MaxNestingDepth > 50) {
 				fail = true;
 			}
 		}
