@@ -36,6 +36,9 @@ function main() {
 		console.log('Fail!')
 		process.exitCode = 1;
 	}
+	else {
+		console.log('Pass!')
+	}
 }
 
 
