@@ -3,8 +3,8 @@ var options = {tokens:true, tolerant: true, loc: true, range: true };
 var fs = require("fs");
 
 function main() {
-	var filePaths = ["./checkbox.io/server-side/site/", "./checkbox.io/server-side/site/test/",
-		"./checkbox.io/server-side/site/test/complexity/", "./checkbox.io/server-side/site/routes/"];
+	var filePaths = ["../checkbox.io/server-side/site/", "../checkbox.io/server-side/site/test/",
+		"../checkbox.io/server-side/site/test/complexity/", "../checkbox.io/server-side/site/routes/"];
 
 	var files = [];
 
