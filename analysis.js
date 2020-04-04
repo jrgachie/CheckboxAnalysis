@@ -32,13 +32,8 @@ function main() {
 		}
 	});
 
-	if (fail) {
-		console.log('Fail!')
+	if (fail)
 		process.exitCode = 1;
-	}
-	else {
-		console.log('Pass!')
-	}
 }
 
 
